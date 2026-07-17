@@ -1,0 +1,12 @@
+{
+  "defaultModel": "glm-5.2",
+  "defaultProvider": "opencode-go",
+  "lastChangelogVersion": "0.80.10",
+  "theme": "dracula",
+  "defaultThinkingLevel": "high",
+  "terminal": {
+    "showTerminalProgress": true
+  },
+  "hideThinkingBlock": false,
+  "showCacheMissNotices": true
+}

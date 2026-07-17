@@ -1,0 +1,6 @@
+.pi/
+auth.json
+models-store.json
+npm/
+pi-session-*
+sessions/

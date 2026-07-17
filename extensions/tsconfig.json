@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@earendil-works/pi-coding-agent": [
+        "../../../.local/share/pi-node/node-v22.22.3-linux-x64/lib/node_modules/@earendil-works/pi-coding-agent/dist/index.d.ts"
+      ],
+      "@earendil-works/pi-tui": [
+        "../../../.local/share/pi-node/node-v22.22.3-linux-x64/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-tui/dist/index.d.ts"
+      ]
+    }
+  },
+  "include": ["./**/*.ts"]
+}
