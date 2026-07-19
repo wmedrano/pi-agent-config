@@ -3,7 +3,7 @@ import type {
   SessionStartEvent,
   ToolCallEvent, ToolCallEventResult,
 } from "@earendil-works/pi-coding-agent";
-import { SoyDevState, Mode } from "./state";
+import { SoyDevState, type Mode, getModes } from "./state";
 
 export default function soydev(pi: ExtensionAPI) {
   let state = new SoyDevState();
@@ -18,20 +18,26 @@ export default function soydev(pi: ExtensionAPI) {
 
   pi.on("session_start", onSessionStart);
 
-  function setModeCommand(mode: Mode, args: string, ctx: ExtensionCommandContext) {
-    let content = [];
+  function queueModeCommand(mode: Mode, args: string, ctx: ExtensionCommandContext) {
     if (args) {
-      content.push({ type: "text" as const, text: args });
+      pi.sendUserMessage(
+        [{ type: "text" as const, text: args }],
+        { deliverAs: "steer" });
     }
-    // TODO: The mode should be set once the message executes, not when its
-    // queued.
-    const prompt = state.setMode(mode);
-    if (prompt) {
-      content.push({ type: "text" as const, text: prompt });
+
+    const transition = state.setMode(mode);
+    if (transition) {
+      pi.sendMessage(
+        {
+          customType: "soydev-mode",
+          content: transition.prompt,
+          display: true,
+          details: { mode, previousMode: transition.previousMode },
+        },
+        { deliverAs: "steer", triggerTurn: !args },
+      );
     }
-    if (content.length > 0) {
-      pi.sendUserMessage(content, { deliverAs: "steer" });
-    }
+
     updateStatus(ctx);
   }
 
@@ -48,28 +54,10 @@ export default function soydev(pi: ExtensionAPI) {
 
   pi.on("tool_call", onToolCall);
 
-  pi.registerCommand("plan", {
-    description: "Inject a planning prompt before the next message",
-    handler: async (args, ctx) => { setModeCommand(Mode.Plan, args, ctx); },
-  });
-
-  pi.registerCommand("tdd", {
-    description: "Inject a TDD prompt to design unit tests before implementation",
-    handler: async (args, ctx) => { setModeCommand(Mode.Tdd, args, ctx); },
-  });
-
-  pi.registerCommand("build", {
-    description: "Switch to build mode (editing enabled)",
-    handler: async (args, ctx) => { setModeCommand(Mode.Build, args, ctx); },
-  });
-
-  pi.registerCommand("qa", {
-    description: "Switch to Q&A mode (ask questions, no edits)",
-    handler: async (args, ctx) => { setModeCommand(Mode.Qa, args, ctx); },
-  });
-
-  pi.registerCommand("qq", {
-    description: "Switch to concise Q&A mode (all tools disabled)",
-    handler: async (args, ctx) => { setModeCommand(Mode.Qq, args, ctx); },
-  });
+  for (const { name, metadata } of getModes()) {
+    pi.registerCommand(name, {
+      description: metadata.description,
+      handler: async (args, ctx) => { queueModeCommand(name, args, ctx); },
+    });
+  }
 }

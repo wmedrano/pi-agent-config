@@ -6,20 +6,6 @@ const COLORS = {
   reset: "\x1b[0m",
 } as const;
 
-/** Operating mode for the SoyDev extension. */
-export enum Mode {
-  /** Full access — tools are unrestricted. */
-  Build = "build",
-  /** Planning-only — edit/write tools are blocked. */
-  Plan = "plan",
-  /** TDD cycle — edit/write tools are blocked; tests are expected. */
-  Tdd = "tdd",
-  /** Question-and-answer — edit/write tools are blocked. */
-  Qa = "qa",
-  /** Concise Q&A — all tools are blocked. */
-  Qq = "qq",
-}
-
 /** Which tools a mode makes available to the agent. */
 export enum ToolAccess {
   /** Every tool is permitted, including destructive ones. */
@@ -40,17 +26,20 @@ export interface ModeMetadata {
   prompt: string;
   /** Which tools the mode allows the agent to use. */
   allowedTools: ToolAccess;
+  /** Short description of what the mode does, used for command registration. */
+  description: string;
 }
 
-/** Map of each {@link Mode} to its {@link ModeMetadata}. */
-export const MODE_METADATA: Record<Mode, ModeMetadata> = {
-  [Mode.Build]: {
+/** Map of every operating mode to its {@link ModeMetadata}. */
+export const MODE_METADATA = {
+  build: {
     label: "⏭ Build",
     color: COLORS.green,
     prompt: `Entered BUILD mode. Editing enabled.`,
     allowedTools: ToolAccess.Any,
+    description: "Switch to build mode (editing enabled)",
   },
-  [Mode.Plan]: {
+  plan: {
     label: "⏸ Plan",
     color: COLORS.yellow,
     prompt: `Entered PLAN mode. Editing disabled.
@@ -69,8 +58,9 @@ Example:
 
 ...`,
     allowedTools: ToolAccess.NonDestructive,
+    description: "Inject a planning prompt before the next message",
   },
-  [Mode.Tdd]: {
+  tdd: {
     label: "⏺ TDD",
     color: COLORS.magenta,
     prompt: `Entered PLAN mode. Editing disabled.
@@ -81,8 +71,9 @@ Example:
   - Test behaviors not methods.
   - Use the <scenario>_<expectation> naming convention`,
     allowedTools: ToolAccess.NonDestructive,
+    description: "Inject a TDD prompt to design unit tests before implementation",
   },
-  [Mode.Qa]: {
+  qa: {
     label: "⏹ Q&A",
     color: COLORS.cyan,
     prompt: `Entered Q&A mode. Editing disabled.
@@ -90,8 +81,9 @@ Example:
 - Answer questions concisely.
 - Research is allowed, but optional.`,
     allowedTools: ToolAccess.NonDestructive,
+    description: "Switch to Q&A mode (ask questions, no edits)",
   },
-  [Mode.Qq]: {
+  qq: {
     label: "⏹ QQ",
     color: COLORS.cyan,
     prompt: `Entered quick Q&A mode. Editing and tools disabled.
@@ -99,8 +91,20 @@ Example:
 - Answer questions concisely.
 - No research allowed. Be quick.`,
     allowedTools: ToolAccess.None,
+    description: "Switch to concise Q&A mode (all tools disabled)",
   },
-};
+} satisfies Record<string, ModeMetadata>;
+
+/** Operating-mode identifier — the keys of {@link MODE_METADATA}. */
+export type Mode = keyof typeof MODE_METADATA;
+
+/** Returns every mode with its metadata so extensions can register commands dynamically. */
+export function getModes(): { name: Mode; metadata: ModeMetadata }[] {
+  return Object.entries(MODE_METADATA).map(([name, metadata]) => ({
+    name: name as Mode,
+    metadata,
+  }));
+}
 
 /** Tools that mutate the user's files. Comparison is case-sensitive and exact. */
 const DESTRUCTIVE_TOOLS = new Set(["edit", "write"]);
@@ -115,24 +119,25 @@ export interface ToolPermission {
 
 /** Tracks the current operating mode and handles mode transitions for the SoyDev extension. */
 export class SoyDevState {
-  _mode: Mode = Mode.Build;
+  _mode: Mode = "build";
   /**
    * Creates a new SoyDevState.
    */
   constructor() { }
 
   /**
-   * Transitions to the specified mode, returning the mode's prompt to inject
-   * into the conversation. If the new mode matches the current one, no
-   * transition occurs and an empty string is returned.
+   * Transitions to the specified mode, returning the mode's prompt and the
+   * previous mode. If the new mode matches the current one, no transition
+   * occurs and null is returned.
    *
    * @param mode - The target operating mode.
-   * @returns The prompt for the new mode, or an empty string if unchanged.
+   * @returns The prompt and previous mode, or null if unchanged.
    */
-  setMode(mode: Mode): string {
-    if (this._mode == mode) return "";
+  setMode(mode: Mode): { prompt: string; previousMode: Mode } | null {
+    if (this._mode == mode) return null;
+    const previousMode = this._mode;
     this._mode = mode;
-    return MODE_METADATA[mode].prompt;
+    return { prompt: MODE_METADATA[mode].prompt, previousMode };
   }
 
   /**
@@ -166,14 +171,14 @@ export class SoyDevState {
         if (DESTRUCTIVE_TOOLS.has(toolName)) {
           return {
             allowed: false,
-            reason: `Edits are disabled in ${this._mode} mode.`,
+            reason: `Edits are disabled in ${metadata.label} mode.`,
           };
         }
         return { allowed: true };
       case ToolAccess.None:
         return {
           allowed: false,
-          reason: `All tools are disabled in ${this._mode} mode.`,
+          reason: `All tools are disabled in ${metadata.label} mode.`,
         };
     }
   }

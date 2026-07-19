@@ -1,4 +1,4 @@
-import { Mode, SoyDevState } from "./state";
+import { type Mode, SoyDevState } from "./state";
 import { assert, assertEqual, assertIncludes, assertNotEqual, describe, test, summary } from "./test-framework";
 
 // ---- helpers ----
@@ -15,7 +15,7 @@ function stateInMode(mode: Mode): SoyDevState {
 
 describe("toolIsAllowed", () => {
   describe("in Build mode", () => {
-    const state = stateInMode(Mode.Build);
+    const state = stateInMode("build");
 
     test("build_allows_edit_tool", () => {
       const result = state.toolIsAllowed("edit");
@@ -49,7 +49,7 @@ describe("toolIsAllowed", () => {
   });
 
   describe("in Plan mode", () => {
-    const state = stateInMode(Mode.Plan);
+    const state = stateInMode("plan");
 
     test("plan_blocks_edit_with_reason", () => {
       const result = state.toolIsAllowed("edit");
@@ -80,7 +80,7 @@ describe("toolIsAllowed", () => {
   });
 
   describe("in TDD mode", () => {
-    const state = stateInMode(Mode.Tdd);
+    const state = stateInMode("tdd");
 
     test("tdd_blocks_edit_with_reason", () => {
       const result = state.toolIsAllowed("edit");
@@ -112,7 +112,7 @@ describe("toolIsAllowed", () => {
 
   // -- QA mode --
   describe("in QA mode", () => {
-    const state = stateInMode(Mode.Qa);
+    const state = stateInMode("qa");
 
     test("qa_blocks_edit_with_reason", () => {
       const result = state.toolIsAllowed("edit");
@@ -143,7 +143,7 @@ describe("toolIsAllowed", () => {
   });
 
   describe("in QQ mode", () => {
-    const state = stateInMode(Mode.Qq);
+    const state = stateInMode("qq");
 
     test("qq_blocks_edit_with_reason", () => {
       const result = state.toolIsAllowed("edit");
@@ -184,13 +184,13 @@ describe("toolIsAllowed", () => {
 
   describe("edge cases", () => {
     test("plan_allows_tool_differing_only_in_case_Edit", () => {
-      const state = stateInMode(Mode.Plan);
+      const state = stateInMode("plan");
       const result = state.toolIsAllowed("Edit");
       assert(result.allowed, '"Edit" (capital E) should be allowed — comparison is case-sensitive');
     });
 
     test("plan_allows_empty_string_tool_name", () => {
-      const state = stateInMode(Mode.Plan);
+      const state = stateInMode("plan");
       const result = state.toolIsAllowed("");
       assert(result.allowed, "empty string should be allowed — it matches neither edit nor write");
     });
