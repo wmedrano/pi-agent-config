@@ -119,7 +119,11 @@ export interface ToolPermission {
 
 /** Tracks the current operating mode and handles mode transitions for the SoyDev extension. */
 export class SoyDevState {
-  _mode: Mode = "build";
+  /**
+   * The mode that will be used.
+   */
+  _next_mode: Mode = "build";
+
   /**
    * Creates a new SoyDevState.
    */
@@ -133,16 +137,16 @@ export class SoyDevState {
    * @param mode - The target operating mode.
    * @returns The prompt and previous mode, or null if unchanged.
    */
-  setMode(mode: Mode): { prompt: string; previousMode: Mode } | null {
-    if (this._mode == mode) return null;
-    const previousMode = this._mode;
-    this._mode = mode;
+  setNextMode(mode: Mode): { prompt: string; previousMode: Mode } | null {
+    if (this._next_mode == mode) return null;
+    const previousMode = this._next_mode;
+    this._next_mode = mode;
     return { prompt: MODE_METADATA[mode].prompt, previousMode };
   }
 
   /**
    * Retrieves and clears the prompt for the most recent mode transition. Useful
-   * for tests that need to drain the prompt injected by {@link setMode}.
+   * for tests that need to drain the prompt injected by {@link setNextMode}.
    */
   pollModePrompt(): void {
     // No-op: `setMode` returns the prompt directly rather than queuing it, so
@@ -163,7 +167,7 @@ export class SoyDevState {
    *   a human-readable {@link ToolPermission.reason} for the block.
    */
   toolIsAllowed(toolName: string): ToolPermission {
-    const metadata = MODE_METADATA[this._mode];
+    const metadata = MODE_METADATA[this._next_mode];
     switch (metadata.allowedTools) {
       case ToolAccess.Any:
         return { allowed: true };
@@ -183,8 +187,14 @@ export class SoyDevState {
     }
   }
 
-  status(): string {
-    const metadata = MODE_METADATA[this._mode];
-    return `${metadata.color}${metadata.label}${COLORS.reset}`;
+  status(modes: Mode[]): string {
+    const modeSequence: Mode[] = [...modes, this._next_mode];
+    let statusItems: string[] = [];
+    for (const mode of modeSequence) {
+      const metadata: ModeMetadata = MODE_METADATA[mode];
+      const s: string = `${metadata.color}${metadata.label}${COLORS.reset}`;
+      statusItems.push(s);
+    }
+    return statusItems.join(' -> ');
   }
 }

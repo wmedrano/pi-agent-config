@@ -1,6 +1,7 @@
 import type {
   ExtensionAPI, ExtensionCommandContext, ExtensionContext,
   SessionStartEvent,
+  BeforeAgentStartEvent,
   ToolCallEvent, ToolCallEventResult,
 } from "@earendil-works/pi-coding-agent";
 import { SoyDevState, type Mode, getModes } from "./state";
@@ -9,7 +10,8 @@ export default function soydev(pi: ExtensionAPI) {
   let state = new SoyDevState();
 
   function updateStatus(ctx: ExtensionContext) {
-    ctx.ui.setStatus('soydev', state.status());
+    const status = state.status([]);
+    ctx.ui.setStatus('soydev', status);
   }
 
   async function onSessionStart(_event: SessionStartEvent, ctx: ExtensionContext) {
@@ -18,41 +20,43 @@ export default function soydev(pi: ExtensionAPI) {
 
   pi.on("session_start", onSessionStart);
 
-  function queueModeCommand(mode: Mode, args: string, ctx: ExtensionCommandContext) {
-    if (args) {
-      pi.sendUserMessage(
-        [{ type: "text" as const, text: args }],
-        { deliverAs: "steer" });
-    }
+  function onToolCall(event: ToolCallEvent): undefined | ToolCallEventResult {
+    const result = state.toolIsAllowed(event.toolName);
+    if (result.allowed) return;
+    return {
+      block: true,
+      reason: result.reason,
+    };
+  }
 
-    const transition = state.setMode(mode);
+  pi.on("tool_call", onToolCall);
+
+  async function onBeforeAgentStart(_: BeforeAgentStartEvent, ctx: ExtensionContext) {
+    updateStatus(ctx);
+  }
+
+  pi.on("before_agent_start", onBeforeAgentStart);
+
+  function queueModeCommand(mode: Mode, args: string, ctx: ExtensionCommandContext) {
+    const transition = state.setNextMode(mode);
     if (transition) {
+      const content = args ? `${transition.prompt}\n\n${args}` : transition.prompt;
       pi.sendMessage(
         {
           customType: "soydev-mode",
-          content: transition.prompt,
+          content,
           display: true,
           details: { mode, previousMode: transition.previousMode },
         },
-        { deliverAs: "steer", triggerTurn: !args },
+        { deliverAs: "followUp", triggerTurn: !!args },
       );
+    } else if (args) {
+      // Mode unchanged, but the user still gave a task — send it as a prompt.
+      pi.sendUserMessage(args, { deliverAs: "followUp" });
     }
 
     updateStatus(ctx);
   }
-
-  function onToolCall(event: ToolCallEvent): undefined | ToolCallEventResult {
-    const result = state.toolIsAllowed(event.toolName);
-    if (!result.allowed) {
-      return {
-        block: true,
-        reason: result.reason,
-      };
-    }
-    return;
-  }
-
-  pi.on("tool_call", onToolCall);
 
   for (const { name, metadata } of getModes()) {
     pi.registerCommand(name, {

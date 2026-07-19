@@ -6,7 +6,7 @@ import { assert, assertEqual, assertIncludes, assertNotEqual, describe, test, su
 /** Create a SoyDevState pre-switched to the given mode. */
 function stateInMode(mode: Mode): SoyDevState {
   const state = new SoyDevState();
-  state.setMode(mode);
+  state.setNextMode(mode);
   state.pollModePrompt();
   return state;
 }
