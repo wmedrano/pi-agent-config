@@ -46,17 +46,7 @@ export const MODE_METADATA = {
 
 - Create a plan for the given task.
 - Output a goal and a list of steps.
-Example:
-
-# Plan
-
-## Goal
-
-...
-
-## Steps
-
-...`,
+- Format: Under \`# Plan\`, have a Goal section and a Steps section. Optionally, add a Validation section.`,
     allowedTools: ToolAccess.NonDestructive,
     description: "Inject a planning prompt before the next message",
   },
@@ -125,6 +115,20 @@ export class SoyDevState {
   _next_mode: Mode = "build";
 
   /**
+   * Modes of queued `soydev-mode` messages that have not been delivered yet,
+   * in delivery order. The last element always equals {@link _next_mode}.
+   * Drained from the front as each message is delivered (see {@link deliverMode}).
+   */
+  _pending_modes: Mode[] = [];
+
+  /**
+   * Whether an `autoplan` run is in flight: the plan-mode prompt has been sent
+   * and `/lgtm` should be fired once the agent finishes generating the plan
+   * (see the `agent_settled` handler in the extension).
+   */
+  _autoplan_pending: boolean = false;
+
+  /**
    * Creates a new SoyDevState.
    */
   constructor() { }
@@ -141,6 +145,7 @@ export class SoyDevState {
     if (this._next_mode == mode) return null;
     const previousMode = this._next_mode;
     this._next_mode = mode;
+    this._pending_modes.push(mode);
     return { prompt: MODE_METADATA[mode].prompt, previousMode };
   }
 
@@ -152,6 +157,65 @@ export class SoyDevState {
     // No-op: `setMode` returns the prompt directly rather than queuing it, so
     // there is nothing buffered here to drain. The method exists primarily so
     // test helpers can mirror that contract without special-casing.
+  }
+
+  /**
+   * Arms or disarms the pending-autoplan flag.
+   *
+   * @param pending - Whether an autoplan plan run is awaiting its `/lgtm`.
+   */
+  setAutoplanPending(pending: boolean): void {
+    this._autoplan_pending = pending;
+  }
+
+  /**
+   * Returns whether an autoplan plan run is awaiting its `/lgtm`.
+   */
+  isAutoplanPending(): boolean {
+    return this._autoplan_pending;
+  }
+
+  /**
+   * Returns the queued modes preceding the final (next) mode, i.e. everything
+   * in {@link _pending_modes} except the tail. Pass this to {@link status} so
+   * the active/next mode (the tail) is appended exactly once by `status`.
+   *
+   * Example: with `_pending_modes = [plan, build, qq]` and `_next_mode = qq`,
+   * returns `[plan, build]` and `status(...)` renders `plan -> build -> qq`.
+   */
+  intermediateModes(): Mode[] {
+    return this._pending_modes.length > 0
+      ? this._pending_modes.slice(0, -1)
+      : [];
+  }
+
+  /**
+   * Returns a copy of every queued, undelivered mode in delivery order. The
+   * last element equals {@link _next_mode}. Primarily for inspection/tests.
+   */
+  pendingModes(): Mode[] {
+    return [...this._pending_modes];
+  }
+
+  /**
+   * Marks the next queued mode as delivered, removing it from the front of
+   * {@link _pending_modes}. Call this from a `soydev-mode` message event so
+   * the status display advances (e.g. `plan -> build -> qq` → `build -> qq`).
+   *
+   * Does not mutate {@link _next_mode}: once the queue is fully drained it
+   * remains as the active display mode.
+   *
+   * @param mode - When provided, removes the first queued entry matching it
+   *   (FIFO). When omitted, removes the front of the queue.
+   */
+  deliverMode(mode?: Mode): void {
+    if (this._pending_modes.length === 0) return;
+    if (mode === undefined) {
+      this._pending_modes.shift();
+      return;
+    }
+    const index = this._pending_modes.indexOf(mode);
+    if (index !== -1) this._pending_modes.splice(index, 1);
   }
 
   /**

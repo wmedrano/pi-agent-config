@@ -197,4 +197,149 @@ describe("toolIsAllowed", () => {
   });
 });
 
+const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
+
+describe("autoplan pending flag", () => {
+  test("defaults_to_not_pending", () => {
+    const state = new SoyDevState();
+    assert(!state.isAutoplanPending(), "autoplan should not be pending by default");
+  });
+
+  test("setAutoplanPending_arms_and_disarms", () => {
+    const state = new SoyDevState();
+    state.setAutoplanPending(true);
+    assert(state.isAutoplanPending(), "flag should be armed after set(true)");
+    state.setAutoplanPending(false);
+    assert(!state.isAutoplanPending(), "flag should be disarmed after set(false)");
+  });
+
+  test("flag_survives_mode_transitions", () => {
+    const state = new SoyDevState();
+    state.setAutoplanPending(true);
+    state.setNextMode("plan");
+    state.deliverMode("plan");
+    state.setNextMode("build");
+    assert(state.isAutoplanPending(), "mode transitions should not clear the autoplan flag");
+  });
+});
+
+describe("pending mode status", () => {
+  // Queue plan → build → qq (starting from the default Build mode).
+  function queuedState(): SoyDevState {
+    const state = new SoyDevState();
+    state.setNextMode("plan");
+    state.setNextMode("build");
+    state.setNextMode("qq");
+    return state;
+  }
+
+  test("setNextMode_records_pending_modes_in_order", () => {
+    const state = queuedState();
+    assertEqual(state.pendingModes().join(","), "plan,build,qq", "pending modes tracked in delivery order");
+  });
+
+  test("intermediateModes_excludes_tail", () => {
+    const state = queuedState();
+    assertEqual(state.intermediateModes().join(","), "plan,build", "intermediate modes are everything except the tail");
+  });
+
+  test("next_mode_is_the_queued_tail", () => {
+    const state = queuedState();
+    assertEqual(stripAnsi(state.status([])), "⏹ QQ", "next mode advances to the last queued mode");
+  });
+
+  test("status_renders_full_pending_chain", () => {
+    const state = queuedState();
+    assertIncludes(
+      stripAnsi(state.status(state.intermediateModes())),
+      "⏸ Plan -> ⏭ Build -> ⏹ QQ",
+      "three pending modes render as a chain",
+    );
+  });
+
+  test("deliverMode_plan_advances_to_build_qq", () => {
+    const state = queuedState();
+    state.deliverMode("plan");
+    assertEqual(state.pendingModes().join(","), "build,qq", "front mode drained");
+    assertEqual(state.intermediateModes().join(","), "build", "intermediate advances");
+    assertIncludes(
+      stripAnsi(state.status(state.intermediateModes())),
+      "⏭ Build -> ⏹ QQ",
+      "status reflects remaining pending chain",
+    );
+  });
+
+  test("deliverMode_build_advances_to_qq", () => {
+    const state = queuedState();
+    state.deliverMode("plan");
+    state.deliverMode("build");
+    assertEqual(state.pendingModes().join(","), "qq", "only tail remains");
+    assertEqual(state.intermediateModes().length, 0, "no intermediate once single pending");
+    assertEqual(stripAnsi(state.status([])), "⏹ QQ", "next mode stays at tail");
+  });
+
+  test("deliverMode_qq_drains_queue_but_keeps_next_mode", () => {
+    const state = queuedState();
+    state.deliverMode("plan");
+    state.deliverMode("build");
+    state.deliverMode("qq");
+    assertEqual(state.pendingModes().length, 0, "queue fully drained");
+    assertEqual(state.intermediateModes().length, 0, "no intermediate once drained");
+    assertEqual(stripAnsi(state.status([])), "⏹ QQ", "next mode persists as active display");
+  });
+
+  test("deliverMode_noop_on_empty_queue", () => {
+    const state = new SoyDevState();
+    state.deliverMode("plan");
+    state.deliverMode();
+    assertEqual(state.pendingModes().length, 0, "empty queue stays empty");
+  });
+
+  test("deliverMode_without_arg_removes_front", () => {
+    const state = new SoyDevState();
+    state.setNextMode("plan");
+    state.setNextMode("build");
+    state.deliverMode();
+    assertEqual(state.pendingModes().join(","), "build", "front removed by default");
+    assertEqual(state.intermediateModes().length, 0, "single pending has no intermediate");
+    assertIncludes(stripAnsi(state.status(state.intermediateModes())), "⏭ Build", "status shows remaining mode");
+  });
+
+  test("single_pending_shows_only_that_mode", () => {
+    const state = new SoyDevState();
+    state.setNextMode("plan");
+    assertEqual(state.pendingModes().join(","), "plan", "single pending mode tracked");
+    assertEqual(state.intermediateModes().length, 0, "tail excluded when single pending");
+    assertEqual(stripAnsi(state.status(state.intermediateModes())), "⏸ Plan", "single pending renders as the mode itself");
+    state.deliverMode("plan");
+    assertEqual(state.pendingModes().length, 0, "drained after delivery");
+    assertEqual(stripAnsi(state.status([])), "⏸ Plan", "mode persists as active after delivery");
+  });
+
+  test("setNextMode_same_mode_does_not_queue", () => {
+    const state = new SoyDevState();
+    state.setNextMode("plan");
+    assert(state.setNextMode("plan") === null, "re-queuing the current mode is a no-op (returns null)");
+    assertEqual(state.pendingModes().join(","), "plan", "duplicate mode not queued");
+  });
+
+  test("deliverMode_matches_front_most_mode_FIFO", () => {
+    const state = new SoyDevState();
+    state.setNextMode("plan");
+    state.setNextMode("build");
+    state.setNextMode("plan");
+    assertEqual(state.pendingModes().join(","), "plan,build,plan", "non-consecutive re-queue appends");
+    assertEqual(state.intermediateModes().join(","), "plan,build", "intermediate excludes tail (plan)");
+    // first delivery removes the FRONT plan, not the tail
+    state.deliverMode("plan");
+    assertEqual(state.pendingModes().join(","), "build,plan", "front-most matching mode removed (FIFO)");
+    assertEqual(state.intermediateModes().join(","), "build", "intermediate advances past first plan");
+    state.deliverMode("build");
+    assertEqual(state.pendingModes().join(","), "plan", "build drained");
+    state.deliverMode("plan");
+    assertEqual(state.pendingModes().length, 0, "final plan drained");
+    assertEqual(stripAnsi(state.status([])), "⏸ Plan", "tail plan persists as active");
+  });
+});
+
 summary();

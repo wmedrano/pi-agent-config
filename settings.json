@@ -1,12 +1,12 @@
 {
-  "defaultModel": "deepseek-v4-pro",
+  "defaultModel": "deepseek-v4-flash",
   "defaultProvider": "opencode-go",
-  "lastChangelogVersion": "0.81.1",
+  "lastChangelogVersion": "0.84.1",
   "theme": "dracula",
-  "defaultThinkingLevel": "max",
+  "defaultThinkingLevel": "high",
   "terminal": {
     "showTerminalProgress": true
   },
-  "hideThinkingBlock": true,
+  "hideThinkingBlock": false,
   "showCacheMissNotices": true
 }
