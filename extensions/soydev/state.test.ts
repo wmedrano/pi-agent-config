@@ -223,6 +223,21 @@ describe("autoplan pending flag", () => {
   });
 });
 
+describe("last run cancelled flag", () => {
+  test("defaults_to_not_cancelled", () => {
+    const state = new SoyDevState();
+    assert(!state.wasLastRunCancelled(), "last run should not be cancelled by default");
+  });
+
+  test("setLastRunCancelled_records_cancelled_state", () => {
+    const state = new SoyDevState();
+    state.setLastRunCancelled(true);
+    assert(state.wasLastRunCancelled(), "flag should be true after set(true)");
+    state.setLastRunCancelled(false);
+    assert(!state.wasLastRunCancelled(), "flag should be false after set(false)");
+  });
+});
+
 describe("pending mode status", () => {
   // Queue plan → build → qq (starting from the default Build mode).
   function queuedState(): SoyDevState {

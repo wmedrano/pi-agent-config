@@ -129,6 +129,12 @@ export class SoyDevState {
   _autoplan_pending: boolean = false;
 
   /**
+   * Whether the most recent agent run ended because the user cancelled it
+   * (e.g., by pressing Escape). Reset on each new agent run.
+   */
+  _last_run_cancelled: boolean = false;
+
+  /**
    * Creates a new SoyDevState.
    */
   constructor() { }
@@ -173,6 +179,22 @@ export class SoyDevState {
    */
   isAutoplanPending(): boolean {
     return this._autoplan_pending;
+  }
+
+  /**
+   * Records whether the most recent agent run was cancelled by the user.
+   *
+   * @param cancelled - True if the run was cancelled (e.g., Escape pressed).
+   */
+  setLastRunCancelled(cancelled: boolean): void {
+    this._last_run_cancelled = cancelled;
+  }
+
+  /**
+   * Returns whether the most recent agent run was cancelled by the user.
+   */
+  wasLastRunCancelled(): boolean {
+    return this._last_run_cancelled;
   }
 
   /**

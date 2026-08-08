@@ -2,6 +2,8 @@ import type {
   ExtensionAPI, ExtensionContext,
   SessionStartEvent,
   BeforeAgentStartEvent,
+  AgentStartEvent,
+  AgentEndEvent,
   MessageStartEvent,
   ToolCallEvent, ToolCallEventResult,
   AgentSettledEvent,
@@ -38,6 +40,28 @@ export default function soydev(pi: ExtensionAPI) {
 
   pi.on("before_agent_start", onBeforeAgentStart);
 
+  // Track whether the run was cancelled so `agent_settled` doesn't auto-fire
+  // `/lgtm` after the user presses Escape.
+  function onAgentStart(_event: AgentStartEvent) {
+    state.setLastRunCancelled(false);
+  }
+
+  pi.on("agent_start", onAgentStart);
+
+  function onAgentEnd(event: AgentEndEvent) {
+    let cancelled = false;
+    for (let i = event.messages.length - 1; i >= 0; i--) {
+      const message = event.messages[i];
+      if (message.role === "assistant") {
+        cancelled = (message as { stopReason?: string }).stopReason === "aborted";
+        break;
+      }
+    }
+    state.setLastRunCancelled(cancelled);
+  }
+
+  pi.on("agent_end", onAgentEnd);
+
   // When an autoplan plan run settles, automatically fire /lgtm. `agent_settled`
   // fires only after the run fully settles (retries, compactions, and queued
   // follow-ups are drained first), and the build/lgtm run it starts will see the
@@ -45,6 +69,7 @@ export default function soydev(pi: ExtensionAPI) {
   function onAgentSettled(_event: AgentSettledEvent, ctx: ExtensionContext) {
     if (!state.isAutoplanPending()) return;
     state.setAutoplanPending(false);
+    if (state.wasLastRunCancelled()) return;
     queueModeCommand("build", "lgtm", ctx);
   }
 
@@ -54,6 +79,7 @@ export default function soydev(pi: ExtensionAPI) {
   // interrupted run can't fire an unexpected lgtm in a later session.
   pi.on("session_shutdown", () => {
     state.setAutoplanPending(false);
+    state.setLastRunCancelled(false);
   });
 
   function onMessageStart(event: MessageStartEvent, ctx: ExtensionContext) {
