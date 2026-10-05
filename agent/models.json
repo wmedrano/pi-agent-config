@@ -1,0 +1,22 @@
+{
+  "providers": {
+    "halogen": {
+      "baseUrl": "http://localhost:8731/v1",
+      "api": "openai-completions",
+      "apiKey": "dummy",
+      "models": [
+        {
+          "id": "halogen-qwen3.8-flash-next",
+          "reasoning": true,
+          "thinkingLevelMap": {
+            "off": "none",
+            "minimal": null,
+            "low": "low",
+            "medium": "medium",
+            "high": "high"
+          }
+        }
+      ]
+    }
+  }
+}

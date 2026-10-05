@@ -1,0 +1,19 @@
+# ---- secrets: never commit ----
+agent/auth.json
+agent/mcp-auth.json
+agent/mcp.log
+agent/mcp.log.*
+
+# ---- regenerable caches ----
+agent/models-store.json
+
+# ---- conversation history (private, large) ----
+agent/sessions/
+
+# ---- misc / transient ----
+*.bak
+*.tmp
+.DS_Store
+agent/extensions/**/node_modules/
+agent/extensions/**/dist/
+agent/skills/**/node_modules/

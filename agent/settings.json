@@ -1,0 +1,14 @@
+{
+  "lastChangelogVersion": "1.0.2",
+  "defaultProvider": "halogen",
+  "defaultModel": "halogen-qwen3.8-flash-next",
+  "hideThinkingBlock": false,
+  "modelThinkingLevels": {
+    "halogen/halogen-qwen3.8-flash-next": "high"
+  },
+  "enabledModels": [
+    "halogen/halogen-qwen3.8-flash-next",
+    "opencode-go/glm-5.3-flash",
+    "opencode-go/deepseek-v4.1-flash"
+  ]
+}
