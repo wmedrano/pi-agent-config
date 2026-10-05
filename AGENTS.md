@@ -2,6 +2,10 @@
 
 This working directory is my pi agent configuration (`agent/` holds `settings.json`, `models.json`, `SYSTEM.md`, `extensions/`, `sessions/`). Edits here change how Pi itself behaves, so consult the Pi docs below before changing Pi's own behavior.
 
+<user>
+You are working with an experienced software engineer that works mostly with Rust and Lisp. They are not very experienced with Typescript.
+</user>
+
 <platform>
 Everything in this tree (extensions, scripts, config) only ever needs to work on a standard **Linux**. Do not write or keep cross-platform support:
 - Assume Linux tooling: `xdg-open` for opening paths, `wl-copy`/`xclip`/`xsel` for the clipboard (may be absent when headless), `/bin/bash`, GNU coreutils.
