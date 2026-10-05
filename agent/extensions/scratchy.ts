@@ -2,7 +2,7 @@
  * scratchy - Per-session scratch directory for temporary files.
  */
 
-import { mkdir } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 
@@ -26,6 +26,12 @@ async function ensureScratchDir(ctx: ExtensionContext): Promise<string> {
   return dir;
 }
 
+async function xdgOpen(pi: ExtensionAPI, file: string): Promise<boolean> {
+  const { code } = await pi.exec("xdg-open", [file], { timeout: 1000 });
+  // pi.exec resolves with a non-zero code instead of rejecting when the binary is missing.
+  return code === 0;
+}
+
 export default function scratchy(pi: ExtensionAPI) {
   // Add the scratch section to the system prompt. The path is fixed per session, so the
   // text is stable across turns and Pi patches the prompt only on the first run.
@@ -45,10 +51,26 @@ export default function scratchy(pi: ExtensionAPI) {
     description: "Open the session scratch directory",
     handler: async (_args, ctx) => {
       const dir = await ensureScratchDir(ctx);
-      const { code } = await pi.exec("xdg-open", [dir], { timeout: 1000 });
-      // pi.exec resolves with a non-zero code instead of rejecting when the binary is missing.
-      const notification = code === 0 ? `Opened ${dir}` : `Scratch: ${dir}`;
+      const ok = await xdgOpen(pi, dir);
+      const notification = ok ? `Opened ${dir}` : `Scratch: ${dir}`;
       ctx.ui.notify(notification, "info");
+    },
+  });
+
+  pi.registerCommand("artifact", {
+    description: "Open an artifact.",
+    handler: async (_args, ctx) => {
+      const dir = await ensureScratchDir(ctx);
+      const entries = await readdir(dir, { withFileTypes: true, recursive: true });
+      const files = entries.filter((entry) => entry.isFile()).map((entry) => entry.name);
+      if (files.length === 0) {
+        ctx.ui.notify(`No files in ${dir}`, "info");
+        return;
+      }
+      const file = await ctx.ui.select("Open artifact", files);
+      if (file) {
+        await xdgOpen(pi, file);
+      }
     },
   });
 }
