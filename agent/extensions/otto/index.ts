@@ -47,11 +47,15 @@ export default function otto(pi: ExtensionAPI) {
     ].join("\n");
   });
 
-  pi.registerCommand("steer", {
-    description: `Inject a message into the current run. If no message is specified, the default fallback is used: "You have enough information, finalize your work")`,
+  pi.registerCommand("queue", {
+    description: `Inject a message to be sent after the current run.`,
     handler: async (args, ctx) => {
-      const text = args?.trim() || "You have enough information, finalize your work";
-      pi.sendUserMessage(text, { deliverAs: "steer" });
+      const text = args.trim();
+      if (text === "") {
+        ctx.ui.notify(`⚠️ No message was provided to /queue`, "warning");
+        return;
+      }
+      pi.sendUserMessage(text, { deliverAs: "followUp" });
     },
   });
 
