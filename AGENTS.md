@@ -2,6 +2,11 @@
 
 This working directory is my pi agent configuration (`agent/` holds `settings.json`, `models.json`, `SYSTEM.md`, `extensions/`, `sessions/`). Edits here change how Pi itself behaves, so consult the Pi docs below before changing Pi's own behavior.
 
+<platform>
+Everything in this tree (extensions, scripts, config) only ever needs to work on a standard **Linux**. Do not write or keep cross-platform support:
+- Assume Linux tooling: `xdg-open` for opening paths, `wl-copy`/`xclip`/`xsel` for the clipboard (may be absent when headless), `/bin/bash`, GNU coreutils.
+</platform>
+
 <docs>
 Pi documentation (read only when the user asks about pi itself, its SDK, extensions, themes, skills, or TUI):
 - Main documentation: /home/wmedrano/.local/share/pi-node/node-v22.22.3-linux-x64/lib/node_modules/@earendil-works/pi-coding-agent/README.md
