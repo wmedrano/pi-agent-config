@@ -1,7 +1,7 @@
 {
   "lastChangelogVersion": "1.0.4",
   "defaultProvider": "opencode-go",
-  "defaultModel": "deepseek-v4.1-flash",
+  "defaultModel": "glm-5.3-flash",
   "hideThinkingBlock": false,
   "modelThinkingLevels": {
     "halogen/halogen-qwen3.8-flash-next": "high"

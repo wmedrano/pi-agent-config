@@ -4,7 +4,9 @@
 
 import { mkdir } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { getCapabilities, hyperlink } from "@earendil-works/pi-tui";
 
 const ensured = new Set<string>();
 
@@ -24,6 +26,15 @@ export async function ensureScratchDir(ctx: ExtensionContext): Promise<string> {
   return dir;
 }
 
+export function isScratchPath(ctx: ExtensionContext, target: string): boolean {
+  if (target === "") {
+    return false;
+  }
+  const base = resolve(scratchDir(ctx));
+  const abs = resolve(ctx.cwd, target);
+  return abs.startsWith(base + sep);
+}
+
 export function scratchRelPath(ctx: ExtensionContext, target: string): string | undefined {
   if (target === "") {
     return undefined;
@@ -34,4 +45,17 @@ export function scratchRelPath(ctx: ExtensionContext, target: string): string | 
   // to be strictly inside so the scratch dir itself has no name to show. No filesystem check:
   // tool_call fires before the tool runs, so a write target may not exist yet.
   return abs.startsWith(base + sep) ? relative(base, abs) : undefined;
+}
+
+export function scratchLink(ctx: ExtensionContext, target: string): string {
+  // Shorten to the scratch-relative path when possible, regardless of hyperlink
+  // support; the hyperlink only makes it clickable.
+  const relPath = scratchRelPath(ctx, target);
+  const displayPath = relPath === undefined ? target : relPath;
+  const { hyperlinks } = getCapabilities();
+  if (!hyperlinks) {
+    return displayPath;
+  }
+  // Use a file:// URL: some terminals require a scheme in the OSC 8 target.
+  return hyperlink(displayPath, pathToFileURL(resolve(ctx.cwd, target)).href);
 }

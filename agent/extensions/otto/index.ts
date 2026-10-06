@@ -1,45 +1,76 @@
 /**
  * otto - Functionality for directing a chat session and its scratch workspace.
- *
- * Commands: /steer, /scratch, /artifact, /plan
  */
 
 import { readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import {
   type BeforeAgentStartEvent, type ExtensionAPI, type ExtensionContext,
-  type ToolCallEvent
+  type ToolResultEvent
 } from "@earendil-works/pi-coding-agent";
-import { ensureScratchDir, scratchRelPath } from "./scratch.js";
+import { ensureScratchDir, scratchLink, isScratchPath } from "./scratch.js";
+
+enum PlanStatus { None, InProgress, Drafted };
 
 export default function otto(pi: ExtensionAPI) {
+  let planPath = "";
+  let planStatus = PlanStatus.None;
+
+  function updateStatus(ctx: ExtensionContext) {
+    const theme = ctx.ui.theme;
+    let status: string | undefined = undefined;
+
+    // Plan
+    const link = scratchLink(ctx, planPath);
+    switch (planStatus) {
+      case PlanStatus.None:
+        break;
+      case PlanStatus.InProgress:
+        status = theme.fg("muted", "📝 planning…");
+        break;
+      case PlanStatus.Drafted:
+        status = theme.fg("accent", `📝 ${link}`);
+        break;
+    }
+
+    ctx.ui.setStatus("otto", status);
+  }
+
+  function startPlan(ctx: ExtensionContext, path: string) {
+    planPath = path;
+    planStatus = PlanStatus.InProgress;
+    updateStatus(ctx);
+  }
+
   async function xdgOpen(file: string): Promise<boolean> {
     const { code } = await pi.exec("xdg-open", [file], { timeout: 1000 });
     // pi.exec resolves with a non-zero code instead of rejecting when the binary is missing.
     return code === 0;
   }
 
-  pi.on("tool_call", onToolCall);
-  function onToolCall(event: ToolCallEvent, ctx: ExtensionContext) {
-    if (event.toolName !== "edit" && event.toolName !== "write") {
-      return;
-    }
+  pi.on("tool_result", onToolResult);
+  function onToolResult(event: ToolResultEvent, ctx: ExtensionContext) {
+    // Nested calls (e.g. from codemode scripts) re-emit tool_result; only report
+    // model-issued calls, so notifications don't duplicate.
+    if (event.parentToolCallId !== undefined) { return; }
+    if (event.isError) { return; }
+    if (event.toolName !== "edit" && event.toolName !== "write") { return; }
+    if (typeof event.input.path !== "string") { return; }
+    if (!isScratchPath(ctx, event.input.path)) { return; }
+
     const path = event.input.path;
-    if (typeof path !== "string") {
-      return;
-    }
-    const label = scratchRelPath(ctx, path);
-    if (label === undefined) {
-      return;
+    if (planPath !== "" && resolve(ctx.cwd, path) === resolve(planPath)) {
+      if (planStatus === PlanStatus.InProgress) {
+        planStatus = PlanStatus.Drafted;
+      }
+      updateStatus(ctx);
     }
     const verb = event.toolName === "edit" ? "Updated" : "Wrote";
-    ctx.ui.notify(`🕵️ ${verb} scratch file ${label}`, "info");
+    ctx.ui.notify(`🕵️ ${verb} scratch file ${scratchLink(ctx, path)}`, "info");
   }
 
 
-  // Add the scratch section to the system prompt. The path is fixed per session, so the
-  // text is stable across turns and Pi patches the prompt only on the first run.
   pi.on("before_agent_start", onBeforeAgentStart);
   async function onBeforeAgentStart(event: BeforeAgentStartEvent, ctx: ExtensionContext) {
     const dir = await ensureScratchDir(ctx);
@@ -106,20 +137,17 @@ export default function otto(pi: ExtensionAPI) {
   async function onCommandPlan(args: string, ctx: ExtensionContext) {
     const dir = await ensureScratchDir(ctx);
     const id = randomBytes(9).toString("base64url");
-    const planPath = join(dir, `plan/${id}.md`);
-    const text = createPlanPrompt(planPath, args.trim());
-    pi.sendUserMessage(text, { deliverAs: "steer" });
-  }
-
-  function createPlanPrompt(planPath: string, userPrompt: string): string {
+    const path = join(dir, `plan/${id}.md`);
+    startPlan(ctx, path);
+    const userPrompt = args.trim();
     const planPrompt = `# Instructions
 
-Create a plan for the task and write it to ${planPath}
+Create a plan for the task and write it to ${path}
 
 - Do not edit any files in the workspace.
 - The plan must contain the following sections: [Goal, Steps]
 - Work on the plan once the user gives explicit approval.`;
-
-    return userPrompt ? `${planPrompt}\n\n# Task\n\n${userPrompt}` : planPrompt;
+    const text = userPrompt ? `${planPrompt}\n\n# Task\n\n${userPrompt}` : planPrompt;
+    pi.sendUserMessage(text, { deliverAs: "steer" });
   }
 }
