@@ -50,6 +50,10 @@ export default function otto(pi: ExtensionAPI) {
     description: "Create a plan.",
     handler: onCommandPlan,
   });
+  pi.registerCommand("autoplan", {
+    description: `Switch to auto mode and create a plan (drafted plans are auto-approved).`,
+    handler: onCommandAutoplan,
+  });
 
   let planPath = "";
   let planStatus = PlanStatus.None;
@@ -81,7 +85,7 @@ export default function otto(pi: ExtensionAPI) {
         parts.push(theme.fg("accent", `🚀 ${link}`));
     }
 
-    const separator = theme.fg("dim", "  ┆  ");
+    const separator = theme.fg("dim", "  |  ");
     ctx.ui.setStatus("otto", parts.join(separator));
   }
 
@@ -197,6 +201,13 @@ export default function otto(pi: ExtensionAPI) {
     if (file) {
       await xdgOpen(file);
     }
+  }
+
+  async function onCommandAutoplan(args: string, ctx: ExtensionContext) {
+    // Set the mode first so the auto-approve path in onAgentEnd fires when the
+    // planning run finishes.
+    setMode("auto", ctx);
+    await onCommandPlan(args, ctx);
   }
 
   async function onCommandPlan(args: string, ctx: ExtensionContext) {
