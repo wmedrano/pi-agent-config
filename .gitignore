@@ -14,6 +14,8 @@ agent/sessions/
 *.bak
 *.tmp
 .DS_Store
+agent/bin/
 agent/extensions/**/node_modules/
 agent/extensions/**/dist/
+agent/install/
 agent/skills/**/node_modules/
