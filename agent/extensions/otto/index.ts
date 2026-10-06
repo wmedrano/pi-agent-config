@@ -6,20 +6,31 @@ import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import {
-  type BeforeAgentStartEvent, type ExtensionAPI, type ExtensionContext,
-  type ToolResultEvent
+  type AgentEndEvent, type BeforeAgentStartEvent, type ExtensionAPI,
+  type ExtensionContext, type ToolResultEvent
 } from "@earendil-works/pi-coding-agent";
 import { ensureScratchDir, scratchLink, isScratchPath } from "./scratch.js";
 
 enum PlanStatus { None, InProgress, Drafted };
+type Mode = "auto" | "normal";
+
+const MODE_INFO: Record<Mode, { icon: string; label: string }> = {
+  auto: { icon: "🐇", label: "auto" },
+  normal: { icon: "🐢", label: "normal" },
+};
 
 export default function otto(pi: ExtensionAPI) {
   let planPath = "";
   let planStatus = PlanStatus.None;
+  let mode: Mode = "normal";
 
   function updateStatus(ctx: ExtensionContext) {
     const theme = ctx.ui.theme;
-    let status: string | undefined = undefined;
+    let parts = [];
+
+    // Mode
+    const modeInfo = MODE_INFO[mode];
+    parts.push(ctx.ui.theme.fg("muted", `${modeInfo.icon} ${modeInfo.label}`));
 
     // Plan
     const link = scratchLink(ctx, planPath);
@@ -27,14 +38,21 @@ export default function otto(pi: ExtensionAPI) {
       case PlanStatus.None:
         break;
       case PlanStatus.InProgress:
-        status = theme.fg("muted", "📝 planning…");
+        parts.push(theme.fg("muted", "📝 planning…"));
         break;
       case PlanStatus.Drafted:
-        status = theme.fg("accent", `📝 ${link}`);
-        break;
+        parts.push(theme.fg("accent", `📝 ${link}`));
     }
 
-    ctx.ui.setStatus("otto", status);
+    const separator = theme.fg("dim", "  ┆  ");
+    ctx.ui.setStatus("otto", parts.join(separator));
+  }
+
+  function setMode(newMode: Mode, ctx: ExtensionContext) {
+    mode = newMode;
+    const { icon, label } = MODE_INFO[mode];
+    ctx.ui.notify(`${icon} Mode: ${label}`, "info");
+    updateStatus(ctx);
   }
 
   function startPlan(ctx: ExtensionContext, path: string) {
@@ -71,17 +89,26 @@ export default function otto(pi: ExtensionAPI) {
   }
 
 
+  pi.on("agent_end", onAgentEnd);
+  function onAgentEnd(_event: AgentEndEvent, ctx: ExtensionContext) {
+    if (mode !== "auto" || planStatus !== PlanStatus.Drafted) { return; }
+    planPath = "";
+    planStatus = PlanStatus.None;
+    updateStatus(ctx);
+    ctx.ui.notify("🐇 Plan drafted — auto-approving", "info");
+    pi.sendUserMessage("lgtm, execute the plan", { deliverAs: "followUp" });
+  }
+
   pi.on("before_agent_start", onBeforeAgentStart);
   async function onBeforeAgentStart(event: BeforeAgentStartEvent, ctx: ExtensionContext) {
     const dir = await ensureScratchDir(ctx);
-    // Name of the system prompt section (must match ^[a-z][a-z0-9_-]*$).
-    const section = "scratch";
-    event.systemPromptOptions.sections[section] = [
+    event.systemPromptOptions.sections["scratch"] = [
       `Scratch directory: ${dir}`,
       "- Use it for temporary files: drafts, reports, intermediate output, throwaway logs, one-off scripts.",
       "- It already exists; make subdirectories with mkdir -p as needed.",
       "- Common use case: Store markdown files for requested plans, reviews, or reports."
     ].join("\n");
+    updateStatus(ctx);
   }
 
   pi.registerCommand("queue", {
@@ -95,6 +122,29 @@ export default function otto(pi: ExtensionAPI) {
       return;
     }
     pi.sendUserMessage(text, { deliverAs: "followUp" });
+  }
+
+
+  pi.registerCommand("mode", {
+    description: `Switch otto mode: auto (auto-approve drafted plans) or normal. Toggles when no argument is given.`,
+    handler: onCommandMode,
+  });
+
+  function onShortcutToggleMode(ctx: ExtensionContext) {
+    setMode(mode === "auto" ? "normal" : "auto", ctx);
+  }
+
+  async function onCommandMode(args: string, ctx: ExtensionContext) {
+    const arg = args.trim().toLowerCase();
+    if (arg === "") {
+      setMode(mode === "auto" ? "normal" : "auto", ctx);
+      return;
+    }
+    if (arg === "auto" || arg === "normal") {
+      setMode(arg as Mode, ctx);
+      return;
+    }
+    ctx.ui.notify(`⚠️ Unknown mode "${arg}". Expected "auto" or "normal".`, "warning");
   }
 
   pi.registerCommand("scratch", {
@@ -149,5 +199,18 @@ Create a plan for the task and write it to ${path}
 - Work on the plan once the user gives explicit approval.`;
     const text = userPrompt ? `${planPrompt}\n\n# Task\n\n${userPrompt}` : planPrompt;
     pi.sendUserMessage(text, { deliverAs: "steer" });
+  }
+
+  pi.registerShortcut("ctrl+i", {
+    description: "Toggle otto mode: auto (auto-approve drafted plans) or normal.",
+    handler: onShortcutToggleMode,
+  });
+
+  pi.registerShortcut("ctrl+r", {
+    description: "Open an artifact.",
+    handler: onShortcutArtifact,
+  });
+  function onShortcutArtifact(ctx: ExtensionContext) {
+    return onCommandArtifact("", ctx);
   }
 }
