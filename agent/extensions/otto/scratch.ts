@@ -2,17 +2,27 @@
  * Scratch-workspace path helpers for the otto extension.
  */
 
+import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
-import { join, relative, resolve, sep } from "node:path";
+import { basename, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { getCapabilities, hyperlink } from "@earendil-works/pi-tui";
 
 const ensured = new Set<string>();
 
+// Scratch directories are per-project, derived from the working directory, so
+// multiple sessions in the same project share one scratch dir.
+function scratchDirName(cwd: string): string {
+  const hash = createHash("sha256").update(cwd).digest("hex").slice(0, 12);
+  // basename("/") is "", so fall back to "root" to keep the name non-empty.
+  // Strip leading dots so hidden dirs like .pi don't produce hidden dir names.
+  const name = basename(cwd).replace(/^\.+/, "") || "root";
+  return `${name}-${hash}`;
+}
+
 export function scratchDir(ctx: ExtensionContext): string {
-  // TODO: Handle the case where sessionId is not a valid path name.
-  return join("/tmp/pi/scratch", ctx.sessionManager.getSessionId());
+  return join("/tmp/pi/scratch/", scratchDirName(resolve(ctx.cwd)));
 }
 
 export async function ensureScratchDir(ctx: ExtensionContext): Promise<string> {
@@ -20,10 +30,21 @@ export async function ensureScratchDir(ctx: ExtensionContext): Promise<string> {
   if (ensured.has(dir)) {
     return dir;
   }
-  // mkdir -p on every run: /tmp can be wiped between runs.
+  // mkdir -p on every run: /tmp can be wiped between runs. Concurrent sessions
+  // sharing the dir are fine: mkdir recursive is idempotent.
   await mkdir(dir, { recursive: true });
   ensured.add(dir);
   return dir;
+}
+
+export function scratchDirLink(ctx: ExtensionContext): string {
+  const display = `📁 ${scratchDirName(resolve(ctx.cwd))}`;
+  const { hyperlinks } = getCapabilities();
+  if (!hyperlinks) {
+    return display;
+  }
+  // The dir need not exist for the link to work.
+  return hyperlink(display, pathToFileURL(scratchDir(ctx)).href);
 }
 
 export function isScratchPath(ctx: ExtensionContext, target: string): boolean {
