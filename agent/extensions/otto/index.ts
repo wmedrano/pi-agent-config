@@ -13,7 +13,7 @@ import { Key } from "@earendil-works/pi-tui";
 import { ensureScratchDir, scratchLink, scratchDirLink, isScratchPath } from "./scratch.js";
 import { executePlanMessage, planPrompt as buildPlanPrompt, scratchSystemPrompt } from "./prompts.js";
 
-enum PlanStatus { None, InProgress, Drafted };
+enum PlanStatus { None, InProgress, Drafted, Executing };
 type Mode = "auto" | "normal";
 
 const MODE_INFO: Record<Mode, { icon: string; label: string }> = {
@@ -76,6 +76,9 @@ export default function otto(pi: ExtensionAPI) {
         break;
       case PlanStatus.Drafted:
         parts.push(theme.fg("accent", `📝 ${link}`));
+        break;
+      case PlanStatus.Executing:
+        parts.push(theme.fg("accent", `🚀 ${link}`));
     }
 
     const separator = theme.fg("dim", "  ┆  ");
@@ -126,9 +129,14 @@ export default function otto(pi: ExtensionAPI) {
   }
 
   function onAgentEnd(_event: AgentEndEvent, ctx: ExtensionContext) {
+    if (planStatus === PlanStatus.Executing) {
+      // The run that executed the plan just finished; reset the lifecycle.
+      planStatus = PlanStatus.None;
+      updateStatus(ctx);
+      return;
+    }
     if (mode !== "auto" || planStatus !== PlanStatus.Drafted) { return; }
-    planPath = "";
-    planStatus = PlanStatus.None;
+    planStatus = PlanStatus.Executing;
     updateStatus(ctx);
     const link = scratchLink(ctx, planPath);
     ctx.ui.notify(`${MODE_INFO["auto"].icon} Plan ${link} drafted — auto-approving`, "info");
