@@ -2,10 +2,11 @@
 	// Type-checking setup for Pi's own config tree (extensions are plain .ts loaded by jiti,
 	// so nothing here affects how Pi runs, only what your editor/tsserver sees).
 	//
-	// Pi is installed globally with npm --prefix ~/.local/share/pi-node, so there is no
-	// node_modules above ~/.pi for tsserver to walk into. These paths point at the global
-	// install through the stable `current` symlink. Regenerate with:
-	//   npm root -g   ->   .../lib/node_modules/@earendil-works/pi-coding-agent
+	// Pi is a managed install, so its packages live in a versioned directory:
+	//   agent/install/releases/<version>/node_modules
+	// There is no stable path or symlink, so after a `pi update` bump the version in the
+	// typeRoots/paths below to match the current release:
+	//   cat agent/install/current-version
 	"compilerOptions": {
 		"target": "ES2023",
 		"lib": ["ES2023"],
@@ -17,19 +18,15 @@
 		"esModuleInterop": true,
 		"resolveJsonModule": true,
 		"forceConsistentCasingInFileNames": true,
-		// @types/node ships inside the pi package; add ./node_modules/@types for local deps.
+		// @types/node ships inside the pi release; add ./node_modules/@types for local deps.
 		"typeRoots": [
 			"./node_modules/@types",
-			"/home/wmedrano/.local/share/pi-node/current/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/@types"
+			"./agent/install/releases/1.0.4/node_modules/@types"
 		],
 		"types": ["node"],
+		// Resolve pi's own packages (and any other @earendil-works/*) out of the release.
 		"paths": {
-			"@earendil-works/pi-coding-agent": [
-				"/home/wmedrano/.local/share/pi-node/current/lib/node_modules/@earendil-works/pi-coding-agent/dist/index.d.ts"
-			],
-			"@earendil-works/pi-coding-agent/*": [
-				"/home/wmedrano/.local/share/pi-node/current/lib/node_modules/@earendil-works/pi-coding-agent/*"
-			]
+			"@earendil-works/*": ["./agent/install/releases/1.0.4/node_modules/@earendil-works/*"]
 		}
 	},
 	"include": ["agent/**/*.ts"],
