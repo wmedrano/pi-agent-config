@@ -14,6 +14,12 @@
             "low": "low",
             "medium": "medium",
             "high": "high"
+          },
+          "cost": {
+            "input": 0.15,
+            "output": 0.47,
+            "cacheRead": 0.016,
+            "cacheWrite": 0.2
           }
         }
       ]
