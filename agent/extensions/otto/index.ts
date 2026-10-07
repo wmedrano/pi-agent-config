@@ -55,6 +55,7 @@ export default function otto(pi: ExtensionAPI) {
     handler: onCommandAutoplan,
   });
 
+  let showScratchStatus = false;
   let planPath = "";
   let planStatus = PlanStatus.None;
   let mode: Mode = "normal";
@@ -62,9 +63,6 @@ export default function otto(pi: ExtensionAPI) {
   function updateStatus(ctx: ExtensionContext) {
     const theme = ctx.ui.theme;
     let parts = [];
-
-    // Scratch dir
-    parts.push(theme.fg("muted", scratchDirLink(ctx)));
 
     // Mode
     const modeInfo = MODE_INFO[mode];
@@ -83,6 +81,11 @@ export default function otto(pi: ExtensionAPI) {
         break;
       case PlanStatus.Executing:
         parts.push(theme.fg("accent", `🚀 ${link}`));
+    }
+
+    // Scratch dir
+    if (showScratchStatus) {
+      parts.push(theme.fg("muted", scratchDirLink(ctx)));
     }
 
     const separator = theme.fg("dim", "  |  ");
@@ -121,15 +124,23 @@ export default function otto(pi: ExtensionAPI) {
     if (typeof event.input.path !== "string") { return; }
     if (!isScratchPath(ctx, event.input.path)) { return; }
 
+    let statusChanged = false;
     const path = event.input.path;
-    if (planPath !== "" && resolve(ctx.cwd, path) === resolve(planPath)) {
+    const isPlan = planPath !== "" && resolve(ctx.cwd, path) === resolve(planPath);
+    if (isPlan) {
       if (planStatus === PlanStatus.InProgress) {
         planStatus = PlanStatus.Drafted;
+        statusChanged = true;
       }
-      updateStatus(ctx);
+    } else {
+      showScratchStatus = true;
+      statusChanged = true;
     }
     const verb = event.toolName === "edit" ? "Updated" : "Wrote";
     ctx.ui.notify(`🕵️ ${verb} scratch file ${scratchLink(ctx, path)}`, "info");
+    if (statusChanged) {
+      updateStatus(ctx);
+    }
   }
 
   function onAgentEnd(_event: AgentEndEvent, ctx: ExtensionContext) {
