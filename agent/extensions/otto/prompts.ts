@@ -1,19 +1,28 @@
-/**
- * Prompt text used by the otto extension, kept separate from event wiring.
- */
-
-/** The prompt sent to the agent for the /plan command. */
-export function planPrompt(path: string): string {
-  return `# Instructions
+export function planPrompt(path: string, prompt: string): string {
+  const base = `# Instructions
 
 Create a plan for the task and write it to ${path}
 
-- Do not edit any files in the workspace.
+- Do not execute the plan. If experiments are needed, use the scratch directory.
 - The plan must contain the following sections: [Goal, Steps]
 - Work on the plan once the user gives explicit approval.`;
+  if (prompt === "") return base;
+  return `${base}\n\n# Task\n\n${prompt}`;
 }
 
-/** System prompt section describing the session scratch directory. */
+export function reportPrompt(path: string, prompt: string): string {
+  if (prompt === "") {
+    return `Create a report on your findings and write it to ${path}`;
+  }
+  return `# Instructions
+
+Create a report and write it to ${path}
+
+# Topic
+
+${prompt}`;
+}
+
 export function scratchSystemPrompt(dir: string): string {
   return [
     `Scratch directory: ${dir}`,
@@ -24,7 +33,6 @@ export function scratchSystemPrompt(dir: string): string {
   ].join("\n");
 }
 
-/** Follow-up message injected after a plan is drafted and auto-approved. */
-export function executePlanMessage(): string {
-  return "Execute the plan if it is ready. If not, ask me clarifying questions.";
+export function executePlanPrompt(): string {
+  return "Implement the plan if it is ready. If not, ask me clarifying questions.";
 }

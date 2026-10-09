@@ -10,7 +10,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Key } from "@earendil-works/pi-tui";
 import { Scratchy } from "./scratch.js";
-import { executePlanMessage, planPrompt as buildPlanPrompt, scratchSystemPrompt } from "./prompts.js";
+import { executePlanPrompt, scratchSystemPrompt, reportPrompt, planPrompt } from "./prompts.js";
 
 enum PlanStatus { None, InProgress, Drafted, Executing };
 type Mode = "auto" | "normal";
@@ -131,7 +131,7 @@ export default function otto(pi: ExtensionAPI) {
     updateStatus(ctx);
     const link = scratchy.link(planPath);
     ctx.ui.notify(`${MODE_INFO["auto"].icon} Plan ${link} drafted — auto-approving`, "info");
-    pi.sendUserMessage(executePlanMessage(), { deliverAs: "followUp" });
+    pi.sendUserMessage(executePlanPrompt(), { deliverAs: "followUp" });
   }
 
   pi.on("session_start", onSessionStart);
@@ -226,9 +226,17 @@ export default function otto(pi: ExtensionAPI) {
   });
   async function onCommandPlan(args: string, ctx: ExtensionContext) {
     const path = startPlan(ctx);
-    const userPrompt = args.trim();
-    const planPrompt = buildPlanPrompt(path);
-    const text = userPrompt ? `${planPrompt}\n\n# Task\n\n${userPrompt}` : planPrompt;
-    pi.sendUserMessage(text, { deliverAs: "steer" });
+    const prompt = planPrompt(path, args.trim());
+    pi.sendUserMessage(prompt, { deliverAs: "steer" });
+  }
+
+  pi.registerCommand("report", {
+    description: "Create a report.",
+    handler: onCommandReport,
+  });
+  async function onCommandReport(args: string, ctx: ExtensionContext) {
+    const path = scratchy.reserve("report", "md");
+    const prompt = reportPrompt(path, args.trim());
+    pi.sendUserMessage(prompt, { deliverAs: "followUp" });
   }
 }
