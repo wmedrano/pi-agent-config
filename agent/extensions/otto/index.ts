@@ -10,6 +10,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Key } from "@earendil-works/pi-tui";
 import { Scratchy } from "./scratch.js";
+import { Btw } from "./btw.js";
 import { executePlanPrompt, scratchSystemPrompt, reportPrompt, planPrompt } from "./prompts.js";
 
 enum PlanStatus { None, InProgress, Drafted, Executing };
@@ -26,6 +27,22 @@ export default function otto(pi: ExtensionAPI) {
   let planPath = "";
   let planStatus = PlanStatus.None;
   let mode: Mode = "normal";
+  const btw = new Btw(pi);
+
+  pi.registerCommand("btw", {
+    description: "Answer a side question without tools or changing the conversation.",
+    handler: async (args, ctx) => {
+      // Fire-and-forget: the answer streams in the background and the notification
+      // below tells the user where it landed.
+      void btw.answer(args, ctx, scratchy).then((result) => {
+        if (!result) return;
+        showScratchStatus = true;
+        updateStatus(ctx);
+        const status = `BTW answer saved ${scratchy.link(result.path)}`;
+        ctx.ui.notify(`💬 ${status}`, result.truncated ? "warning" : "info");
+      });
+    },
+  });
 
   pi.registerShortcut(Key.alt("m"), {
     description: "Toggle otto mode (auto/normal)",
